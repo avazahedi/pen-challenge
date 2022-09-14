@@ -147,7 +147,11 @@ try:
         imgray = cv2.cvtColor(images, cv2.COLOR_BGR2GRAY)
         ret, thresh = cv2.threshold(imgray, 127, 255, 0)
         contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-        cv2.drawContours(images, contours, -1, (0,255,0), 3)
+        # cv2.drawContours(images, contours, -1, (0,255,0), 3)
+        areas = [cv2.contourArea(c) for c in contours]
+        max_idx = np.argmax(areas)
+        cnt = contours[max_idx]
+        cv2.drawContours(images, [cnt], 0, (0,255,0), 3)
 
     
     
