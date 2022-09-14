@@ -1,3 +1,4 @@
+from __future__ import print_function
 import pyrealsense2 as rs
 import numpy as np
 import cv2
@@ -33,22 +34,50 @@ if device_product_line == 'L500':
 else:
     config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
 
+#---------------------------------------------------------------
 
-# args parser to record and playback from command line
+# Args Parsing
+# to record and playback from command line
 # python3 cv_demos.py --record_pb record --file_name 'test.mp4'
 # python3 cv_demos.py --record_pb playback --file_name 'test.mp4'
-parser = argparse.ArgumentParser(description='Start/stop recording data.')
-parser.add_argument('--record_pb', type=str, required=True)
-parser.add_argument('--file_name', type=str, required=True)
-args = parser.parse_args()
-if args.record_pb.lower() == 'record':
-    # now = dt.datetime.now()
-    # file_time = now.strftime('%m-%d-%Y_%H:%M:%S')
-    # filename = f'CV_{file_time}.mov'
-    filename = f'{args.file_name}'
-    config.enable_record_to_file(filename)
-if args.record_pb == 'playback':
-    config.enable_device_from_file(args.file_name)
+
+# parser = argparse.ArgumentParser(description='Start/stop recording data.')
+# parser.add_argument('--record_pb', type=str, required=True)
+# parser.add_argument('--file_name', type=str, required=True)
+# args = parser.parse_args()
+# if args.record_pb.lower() == 'record':
+#     # now = dt.datetime.now()
+#     # file_time = now.strftime('%m-%d-%Y_%H:%M:%S')
+#     # filename = f'CV_{file_time}.mov'
+#     filename = f'{args.file_name}'
+#     config.enable_record_to_file(filename)
+# if args.record_pb == 'playback':
+#     config.enable_device_from_file(args.file_name)
+
+#---------------------------------------------------------------
+
+# Trackbars
+alpha_slider_max = 100
+trackbar_name = 'Alpha x %d' % alpha_slider_max
+title_window = 'Trackbars'
+
+def on_trackbar(val):
+    alpha = val / alpha_slider_max
+    beta = ( 1.0 - alpha )
+    dst = cv2.addWeighted(images, alpha, images, beta, 0.0)
+    cv2.imshow(title_window, dst)
+
+cv2.createTrackbar(trackbar_name, title_window, 9, alpha_slider_max, on_trackbar)
+
+
+#---------------------------------------------------------------
+
+
+#---------------------------------------------------------------
+
+#---------------------------------------------------------------
+
+#---------------------------------------------------------------
 
 
 # Start streaming
@@ -70,7 +99,8 @@ clipping_distance = clipping_distance_in_meters / depth_scale
 align_to = rs.stream.color
 align = rs.align(align_to)
 
-# Streaming loop
+
+## Streaming loop
 try:
     while True:
         # Get frameset of color and depth
@@ -102,18 +132,30 @@ try:
         depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(depth_image, alpha=0.03), cv2.COLORMAP_JET)
         images = np.hstack((bg_removed, depth_colormap))
 
+        # showing just color_image
+        images = color_image
 
+        # Thresholding
+        hsv = cv2.cvtColor(images, cv2.COLOR_BGR2HSV)
 
+        lower = np.array([110, 106, 8], np.uint8)
+        upper = np.array([142, 255, 255], np.uint8)
+        mask = cv2.inRange(hsv, lower, upper)
+        res = cv2.bitwise_and(images, images, mask = mask)
 
-        
+        # Contours
+        imgray = cv2.cvtColor(images, cv2.COLOR_BGR2GRAY)
+        ret, thresh = cv2.threshold(imgray, 127, 255, 0)
+        contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+        cv2.drawContours(images, contours, -1, (0,255,0), 3)
 
-
-
-
-
-
-        cv2.namedWindow('Align Example', cv2.WINDOW_NORMAL)
-        cv2.imshow('Align Example', images)
+    
+    
+        # Display
+        cv2.imshow('frame', images)
+        cv2.imshow('mask', mask)
+        # cv2.imshow('res', res)
+    
         key = cv2.waitKey(1)
         # Press esc or 'q' to close the image window
         if key & 0xFF == ord('q') or key == 27:
