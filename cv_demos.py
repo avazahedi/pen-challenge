@@ -102,6 +102,16 @@ try:
         depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(depth_image, alpha=0.03), cv2.COLORMAP_JET)
         images = np.hstack((bg_removed, depth_colormap))
 
+
+
+
+        
+
+
+
+
+
+
         cv2.namedWindow('Align Example', cv2.WINDOW_NORMAL)
         cv2.imshow('Align Example', images)
         key = cv2.waitKey(1)
