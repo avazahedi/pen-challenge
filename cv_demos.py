@@ -153,15 +153,18 @@ try:
 
         # cv2.drawContours(images, contours, -1, (0,255,0), 3)
 
-        areas = [cv2.contourArea(c) for c in contours]
-        max_idx = np.argmax(areas)
-        cnt = contours[max_idx]
-        cv2.drawContours(images, [cnt], 0, (0,255,0), 3)
+        if len(contours) > 0:
+            areas = [cv2.contourArea(c) for c in contours]
+            max_idx = np.argmax(areas)
+            cnt = contours[max_idx]
+            cv2.drawContours(images, [cnt], 0, (0,255,0), 3)
 
-        # M = cv2.moments(cnt)
-        centroid_x = int(M['m10']/M['m00'])
-        centroid_y = int(M['m01']/M['m00'])
-        cv2.circle(images, (centroid_x, centroid_y), 10, (255,0,0), -1)
+            M = cv2.moments(cnt)
+            centroid_x = int(M['m10']/M['m00'])
+            centroid_y = int(M['m01']/M['m00'])
+            cv2.circle(images, (centroid_x, centroid_y), 10, (255,0,0), -1)
+        else:
+            print('no contours found')
 
     
         # Display
