@@ -140,20 +140,24 @@ try:
 
         lower = np.array([110, 106, 8], np.uint8)
         upper = np.array([142, 255, 255], np.uint8)
+
         mask = cv2.inRange(hsv, lower, upper)
         res = cv2.bitwise_and(images, images, mask = mask)
 
         # Contours
-        imgray = cv2.cvtColor(images, cv2.COLOR_BGR2GRAY)
-        ret, thresh = cv2.threshold(imgray, 127, 255, 0)
+        # imgray = cv2.cvtColor(images, cv2.COLOR_BGR2GRAY)
+        # ret, thresh = cv2.threshold(imgray, 127, 255, 0)
+
+        ret, thresh = cv2.threshold(mask, 127, 255, 0)
         contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
         # cv2.drawContours(images, contours, -1, (0,255,0), 3)
+
         areas = [cv2.contourArea(c) for c in contours]
         max_idx = np.argmax(areas)
         cnt = contours[max_idx]
         cv2.drawContours(images, [cnt], 0, (0,255,0), 3)
 
-    
     
         # Display
         cv2.imshow('frame', images)
