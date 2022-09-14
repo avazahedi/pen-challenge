@@ -158,6 +158,11 @@ try:
         cnt = contours[max_idx]
         cv2.drawContours(images, [cnt], 0, (0,255,0), 3)
 
+        # M = cv2.moments(cnt)
+        centroid_x = int(M['m10']/M['m00'])
+        centroid_y = int(M['m01']/M['m00'])
+        cv2.circle(images, (centroid_x, centroid_y), 10, (255,0,0), -1)
+
     
         # Display
         cv2.imshow('frame', images)
