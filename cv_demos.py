@@ -163,8 +163,8 @@ try:
             centroid_x = int(M['m10']/M['m00'])
             centroid_y = int(M['m01']/M['m00'])
             cv2.circle(images, (centroid_x, centroid_y), 10, (255,0,0), -1)
-        else:
-            print('no contours found')
+        # else:
+        #     print('no contours found')
 
     
         # Display
