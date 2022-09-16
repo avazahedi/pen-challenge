@@ -138,8 +138,13 @@ try:
         # Thresholding
         hsv = cv2.cvtColor(images, cv2.COLOR_BGR2HSV)
 
+        # good purple values if on table
         lower = np.array([110, 106, 8], np.uint8)
         upper = np.array([142, 255, 255], np.uint8)
+
+        # good purple values if in air
+        lower = np.array([110, 80, 8], np.uint8)
+        upper = np.array([142, 180, 255], np.uint8)
 
         mask = cv2.inRange(hsv, lower, upper)
         res = cv2.bitwise_and(images, images, mask = mask)
@@ -166,8 +171,6 @@ try:
                 cv2.circle(images, (centroid_x, centroid_y), 10, (255,0,0), -1)
             except:
                 print('Contour not found')
-        # else:
-        #     print('no contours found')
 
     
         # Display

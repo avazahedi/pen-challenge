@@ -10,6 +10,8 @@ mode = 'h'
 joints = robot.arm.get_joint_commands()
 T = mr.FKinSpace(robot.arm.robot_des.M, robot.arm.robot_des.Slist, joints)
 [R, p] = mr.TransToRp(T) # get the rotation matrix and the displacement
+# R is rotation matrix
+# p is x,y,z coordinates
 print(R)
 print(p)
 
