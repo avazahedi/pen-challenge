@@ -4,6 +4,7 @@ import numpy as np
 import cv2
 from interbotix_xs_modules.xs_robot.arm import InterbotixManipulatorXS
 import modern_robotics as mr
+import time
 
 # Create a pipeline
 pipeline = rs.pipeline()
@@ -35,34 +36,82 @@ else:
     config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
 
 
-# returns pen coords wrt camera in meters
-def vision():
-    # Start streaming
-    cfg = pipeline.start(config)
+# Start streaming
+cfg = pipeline.start(config)
 
-    profile = cfg.get_stream(rs.stream.color)
-    intr = profile.as_video_stream_profile().get_intrinsics()
+profile = cfg.get_stream(rs.stream.color)
+intr = profile.as_video_stream_profile().get_intrinsics()
 
-    # Getting the depth sensor's depth scale (see rs-align example for explanation)
-    depth_sensor = cfg.get_device().first_depth_sensor()
-    depth_scale = depth_sensor.get_depth_scale()
-    print("Depth Scale is: " , depth_scale)
+# Getting the depth sensor's depth scale (see rs-align example for explanation)
+depth_sensor = cfg.get_device().first_depth_sensor()
+depth_scale = depth_sensor.get_depth_scale()
+print("Depth Scale is: " , depth_scale)
 
-    # We will be removing the background of objects more than
-    #  clipping_distance_in_meters meters away
-    clipping_distance_in_meters = 1 #1 meter
-    clipping_distance = clipping_distance_in_meters / depth_scale
+# We will be removing the background of objects more than
+#  clipping_distance_in_meters meters away
+clipping_distance_in_meters = 1 #1 meter
+clipping_distance = clipping_distance_in_meters / depth_scale
 
-    # Create an align object
-    # rs.align allows us to perform alignment of depth frames to others frames
-    # The "align_to" is the stream type to which we plan to align depth frames.
-    align_to = rs.stream.color
-    align = rs.align(align_to)
+# Create an align object
+# rs.align allows us to perform alignment of depth frames to others frames
+# The "align_to" is the stream type to which we plan to align depth frames.
+align_to = rs.stream.color
+align = rs.align(align_to)
 
-    ## Streaming loop
-    running = True
-    while running:
-       
+
+
+# The robot object is what you use to control the robot
+robot = InterbotixManipulatorXS("px100", "arm", "gripper")
+
+# # Calibration
+# robot.arm.go_to_home_pose()
+# import time
+# time.sleep(8)  # 8s to get pen in position for robot to grab
+# robot.gripper.grasp(2.0)
+# pen_coords_wrt_camera = vision()
+
+
+# move arm to starting position
+robot.arm.go_to_home_pose()
+time.sleep(1)
+
+# given the location of the pincherX relative to the camera frame
+# can convert camera (x,y,z) coordinates into cylindrical coordinates
+# cenetered at the base frame of the pincherX
+
+
+#### Calibration ####
+# # find the position of the end effector given the joint states
+# joints = robot.arm.get_joint_commands()
+
+# # open grippers, give time to position pen in grippers, close grippers
+# robot.gripper.release(2.0)
+# time.sleep(8)
+# robot.gripper.close(2.0)
+
+# T = mr.FKinSpace(robot.arm.robot_des.M, robot.arm.robot_des.Slist, joints)
+# [R, p] = mr.TransToRp(T) # get the rotation matrix and the displacement
+# print(f'pen coords wrt robot base: {p}')
+# # pen coords wrt robot base
+# P_rx, P_ry, P_rz = p[0], p[1], p[2]
+
+# O_cy = P_ry + P_cd
+# O_cx = P_rx + P_cx
+# O_cz = P_rz + P_cy
+# print(f"O_cy: {O_cy}, O_cx: {O_cx}, O_cz: {O_cz}")
+#### End Calibration ####
+
+O_cy = 0.0506187
+O_cx = -0.0132525
+O_cz = 0.2670000
+
+
+## Streaming loop
+
+try:
+    getting_pen = True
+    while getting_pen:
+    
         # Get frameset of color and depth
         frames = pipeline.wait_for_frames()
         # frames.get_depth_frame() is a 640x360 depth image
@@ -120,7 +169,7 @@ def vision():
                 centroid_x = int(M['m10']/M['m00'])
                 centroid_y = int(M['m01']/M['m00'])
                 cv2.circle(images, (centroid_x, centroid_y), 10, (255,0,0), -1)
-                print(f'centroid found: {centroid_x}, {centroid_y}') 
+                # print(f'centroid found: {centroid_x}, {centroid_y}') 
 
                 # get depth of centroid in pixel coordinates
                 # pixel_distance_in_meters
@@ -133,70 +182,77 @@ def vision():
                 # depth - the depth in meters
                 # returns the x,y, and z coordinates in meters as a list
 
-                running = False
-                pipeline.stop()
+                # if pen_coords_wrt_camera[2] >= 1.0:
+                #     pass
+
+
+
+                # measure pen location
+                # print(f'pen coords wrt camera (m): {pen_coords_wrt_camera}')
+
+                # pen coords wrt camera
+                P_cx, P_cy, P_cd = pen_coords_wrt_camera[0], pen_coords_wrt_camera[1], pen_coords_wrt_camera[2]
+
+                # pen coords wrt robot
+                P_rx = O_cx - P_cx
+                P_ry = O_cy - P_cd
+                P_rz = O_cz - P_cy
+                # print(f'P_r coords: {P_rx} {P_ry} {P_rz}')
+
+                # theta = waist rotation in radians
+                theta = np.arctan(P_ry/P_rx)
+                # print(f'theta: {theta}')
+
+                # turn at waist until end-effector is facing the pen
+                # robot.arm.set_single_joint_position('waist', theta)
+
+                # get end effector position
+                joints = robot.arm.get_joint_commands()
+                T = mr.FKinSpace(robot.arm.robot_des.M, robot.arm.robot_des.Slist, joints)
+                [R_ee, p_ee] = mr.TransToRp(T) # get the rotation matrix and the displacement
+                # print(f'end effector coords wrt robot base: {p_ee}')
+
+                ee_x, ee_y, ee_z = p_ee[0], p_ee[1], p_ee[2]
+                # displacement between end effector and pen location
+                pe_error = [P_rx - ee_x, P_ry - ee_y, P_rz - ee_z]
+
+                if (pe_error[0] <= 0.02) and (pe_error[1] <= 0.02) and (pe_error[2] <= 0.02):
+                    getting_pen = False
+                    print('next to pen')
+                    robot.gripper.grasp(2.0)
+                    break
+                
+                # move forward until pen is inside grippers
+                # joints_pos = [0, 0.1, -0.1, 0]  # [waist, shoulder, elbow, wrist_angle] relative posns
+                # robot.arm.set_joint_positions(joints_pos)
+                robot.arm.set_ee_cartesian_trajectory(P_rx, P_ry, P_rz)
+                # robot.arm.set_ee_cartesian_trajectory(pe_error[0], pe_error[1], pe_error[2])
+
+                # # close grippers
+                # robot.gripper.grasp(2.0)
+
+                # move arm to starting position
+                # robot.arm.go_to_home_pose()
+
+                # move arm to sleep position
+                # robot.arm.go_to_sleep_pose()
+
 
             except:
                 pass
-    
-    return pen_coords_wrt_camera
 
 
 
-# The robot object is what you use to control the robot
-robot = InterbotixManipulatorXS("px100", "arm", "gripper")
+            # Display
+            cv2.imshow('frame', images)
+            # cv2.imshow('mask', mask)
+            # cv2.imshow('res', res)
+        
+            key = cv2.waitKey(1)
+            # Press esc or 'q' to close the image window
+            if key & 0xFF == ord('q') or key == 27:
+                cv2.destroyAllWindows()
+                break
 
-# # Calibration
-# robot.arm.go_to_home_pose()
-# import time
-# time.sleep(8)  # 8s to get pen in position for robot to grab
-# robot.gripper.grasp(2.0)
-# pen_coords_wrt_camera = vision()
-
-
-# move arm to starting position
-robot.arm.go_to_home_pose()
-
-# open grippers
-# robot.gripper.release(2.0)
-
-# measure pen location
-pen_coords_wrt_camera = vision()
-print(f'pen coords wrt camera (m): {pen_coords_wrt_camera}')
-
-P_cx, P_cy, P_cd = pen_coords_wrt_camera[0], pen_coords_wrt_camera[1], pen_coords_wrt_camera[2]
-
-# given the location of the pincherX relative to the camera frame
-# can convert camera (x,y,z) coordinates into cylindrical coordinates
-# cenetered at the base frame of the pincherX
-
-
-# find the position of the end effector given the joint states
-joints = robot.arm.get_joint_commands()
-T = mr.FKinSpace(robot.arm.robot_des.M, robot.arm.robot_des.Slist, joints)
-[R, p] = mr.TransToRp(T) # get the rotation matrix and the displacement
-print(f'pen coords wrt robot base: {p}')
-# pen coords wrt robot base
-P_rx, P_ry, P_rz = p[0], p[1], p[2]
-
-
-O_cy = P_ry + P_cd
-O_cx = P_rx + P_cx
-O_cz = P_rz + P_cy
-
-
-# turn at waist until end-effector is facing the pen
-robot.arm.set_single_joint_position('waist', -0.1)
-
-# move forward until pen is inside grippers
-joints_pos = [0, 0.1, -0.1, 0]  # [waist, shoulder, elbow, wrist_angle] relative posns
-robot.arm.set_joint_positions(joints_pos)
-
-# # close grippers
-# robot.gripper.grasp(2.0)
-
-# move arm to starting position
-robot.arm.go_to_home_pose()
-
-# move arm to sleep position
-robot.arm.go_to_sleep_pose()
+finally:
+    pipeline.stop()
