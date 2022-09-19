@@ -59,51 +59,44 @@ align_to = rs.stream.color
 align = rs.align(align_to)
 
 
-
 # The robot object is what you use to control the robot
 robot = InterbotixManipulatorXS("px100", "arm", "gripper")
-
-# # Calibration
-# robot.arm.go_to_home_pose()
-# import time
-# time.sleep(8)  # 8s to get pen in position for robot to grab
-# robot.gripper.grasp(2.0)
-# pen_coords_wrt_camera = vision()
 
 
 # move arm to starting position
 robot.arm.go_to_home_pose()
+robot.gripper.release(2.0)
 time.sleep(1)
-
-# given the location of the pincherX relative to the camera frame
-# can convert camera (x,y,z) coordinates into cylindrical coordinates
-# cenetered at the base frame of the pincherX
 
 
 #### Calibration ####
-# # find the position of the end effector given the joint states
-# joints = robot.arm.get_joint_commands()
-
 # # open grippers, give time to position pen in grippers, close grippers
 # robot.gripper.release(2.0)
 # time.sleep(8)
 # robot.gripper.close(2.0)
+
+# # find the position of the end effector given the joint states
+# joints = robot.arm.get_joint_commands()
 
 # T = mr.FKinSpace(robot.arm.robot_des.M, robot.arm.robot_des.Slist, joints)
 # [R, p] = mr.TransToRp(T) # get the rotation matrix and the displacement
 # print(f'pen coords wrt robot base: {p}')
 # # pen coords wrt robot base
 # P_rx, P_ry, P_rz = p[0], p[1], p[2]
+# print(P_rx, P_ry, P_rz)
+# P_cx = 0.0355043
+# P_cy = -0.0210829
+# P_cd = 0.2720000
 
-# O_cy = P_ry + P_cd
 # O_cx = P_rx + P_cx
+# O_cy = P_ry + P_cd
 # O_cz = P_rz + P_cy
-# print(f"O_cy: {O_cy}, O_cx: {O_cx}, O_cz: {O_cz}")
+# print(f"O_cx: {O_cx}, O_cy: {O_cy}, O_cz: {O_cz}")
 #### End Calibration ####
 
-O_cy = 0.0506187
-O_cx = -0.0132525
-O_cz = 0.2670000
+O_cx = 0.2840793
+O_cy = 0.272
+O_cz = 0.172017
 
 
 ## Streaming loop
@@ -177,18 +170,11 @@ try:
 
                 # get location of centroid wrt camera in cartesian coordinates
                 pen_coords_wrt_camera = rs.rs2_deproject_pixel_to_point(intr, [centroid_x, centroid_y], pen_depth)
+                # print(f'pen coords wrt camera (m): {pen_coords_wrt_camera}')
                 # intrinsics - the intrinsic parameters
                 # (px, py) - the pixel coordinates
                 # depth - the depth in meters
                 # returns the x,y, and z coordinates in meters as a list
-
-                # if pen_coords_wrt_camera[2] >= 1.0:
-                #     pass
-
-
-
-                # measure pen location
-                # print(f'pen coords wrt camera (m): {pen_coords_wrt_camera}')
 
                 # pen coords wrt camera
                 P_cx, P_cy, P_cd = pen_coords_wrt_camera[0], pen_coords_wrt_camera[1], pen_coords_wrt_camera[2]
@@ -199,12 +185,16 @@ try:
                 P_rz = O_cz - P_cy
                 # print(f'P_r coords: {P_rx} {P_ry} {P_rz}')
 
+
+                robot_current_angle = 0
                 # theta = waist rotation in radians
                 theta = np.arctan(P_ry/P_rx)
-                # print(f'theta: {theta}')
+                print(f'theta: {theta}')
+                angle_error = theta - robot_current_angle
+                robot_current_angle = theta
 
                 # turn at waist until end-effector is facing the pen
-                # robot.arm.set_single_joint_position('waist', theta)
+                robot.arm.set_single_joint_position('waist', robot_current_angle)
 
                 # get end effector position
                 joints = robot.arm.get_joint_commands()
@@ -216,17 +206,22 @@ try:
                 # displacement between end effector and pen location
                 pe_error = [P_rx - ee_x, P_ry - ee_y, P_rz - ee_z]
 
+
+                # move forward until pen is inside grippers
+                # joints_pos = [0, 0.1, -0.1, 0]  # [waist, shoulder, elbow, wrist_angle] relative posns
+                # robot.arm.set_joint_positions(joints_pos)
+                # robot.arm.set_ee_cartesian_trajectory(P_rx, 0, P_rz)
+                # robot.arm.set_ee_cartesian_trajectory(pe_error[0], pe_error[1], pe_error[2])
+                robot.arm.set_ee_cartesian_trajectory(pe_error[0], 0, pe_error[2])
+
                 if (pe_error[0] <= 0.02) and (pe_error[1] <= 0.02) and (pe_error[2] <= 0.02):
                     getting_pen = False
                     print('next to pen')
                     robot.gripper.grasp(2.0)
+                    robot.arm.go_to_sleep_pose()
+                    robot.gripper.release(2.0)
                     break
                 
-                # move forward until pen is inside grippers
-                # joints_pos = [0, 0.1, -0.1, 0]  # [waist, shoulder, elbow, wrist_angle] relative posns
-                # robot.arm.set_joint_positions(joints_pos)
-                robot.arm.set_ee_cartesian_trajectory(P_rx, P_ry, P_rz)
-                # robot.arm.set_ee_cartesian_trajectory(pe_error[0], pe_error[1], pe_error[2])
 
                 # # close grippers
                 # robot.gripper.grasp(2.0)
